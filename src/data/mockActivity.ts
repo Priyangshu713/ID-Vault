@@ -1,0 +1,60 @@
+import type { ActivityItem } from './types'
+
+export const mockActivity: ActivityItem[] = [
+  {
+    id: 'act-1',
+    documentId: 'aadhaar',
+    documentName: 'Aadhaar',
+    action: 'Verified via DigiLocker official matching',
+    time: 'Today, 11:42 AM',
+    badge: 'DigiLocker',
+  },
+  {
+    id: 'act-2',
+    documentId: 'pan-card',
+    documentName: 'PAN Card',
+    action: 'Tax identity metadata extracted via OCR',
+    time: '3 days ago',
+    badge: 'OCR',
+  },
+  {
+    id: 'act-3',
+    documentId: 'driving-licence',
+    documentName: 'Driving Licence',
+    action: 'Expiry alert: renewal due in 4 months',
+    time: '14 Jun 2026',
+    badge: 'Alert',
+  },
+  {
+    id: 'act-4',
+    documentId: 'vehicle-rc',
+    documentName: 'Vehicle Registration (RC)',
+    action: 'Digital record synced from mParivahan',
+    time: '20 May 2026',
+    badge: 'Digital',
+  },
+  {
+    id: 'act-5',
+    documentId: 'passport',
+    documentName: 'Passport',
+    action: 'Encrypted backup saved to vault storage',
+    time: '2 Mar 2026',
+    badge: 'Vault',
+  },
+  {
+    id: 'act-6',
+    documentId: 'degree-certificate',
+    documentName: 'Degree Certificate',
+    action: 'Academic certificate converted to PDF',
+    time: '18 Feb 2026',
+    badge: 'PDF',
+  },
+  {
+    id: 'act-7',
+    documentId: 'domicile-certificate',
+    documentName: 'Domicile Certificate',
+    action: 'State e-District record linked to vault',
+    time: '15 Jan 2026',
+    badge: 'Linked',
+  },
+]

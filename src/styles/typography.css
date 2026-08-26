@@ -1,0 +1,46 @@
+:root {
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  --ink: #1d2124;
+  --ink-soft: #656a6b;
+  --ink-faint: #8c908e;
+  --canvas: #f7f6f3;
+  --surface: rgba(255, 255, 255, 0.72);
+  --solid-surface: #fcfbf8;
+  --line: rgba(29, 33, 36, 0.09);
+  --focus: #266a86;
+  --shadow-soft: 0 15px 38px rgba(46, 45, 40, 0.09);
+  --shadow-float: 0 18px 42px rgba(39, 41, 41, 0.16), 0 2px 7px rgba(39, 41, 41, 0.06);
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; background: var(--canvas); }
+body { min-width: 320px; min-height: 100vh; margin: 0; color: var(--ink); background: var(--canvas); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button, input { font: inherit; }
+button { color: inherit; }
+button:not(:disabled) { cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 38%, transparent); outline-offset: 3px; }
+button { -webkit-tap-highlight-color: transparent; }
+
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: clamp(2.2rem, 8.5vw, 3rem); letter-spacing: -0.065em; line-height: 0.99; font-weight: 720; }
+h2 { font-size: 1.13rem; letter-spacing: -0.035em; line-height: 1.15; font-weight: 700; }
+small { display: block; }
+
+.eyebrow { margin-bottom: 0.35rem; color: var(--ink-soft); font-size: 0.79rem; font-weight: 650; letter-spacing: 0.018em; }
+.page-subtitle, .greeting__copy { color: var(--ink-soft); font-size: 0.94rem; line-height: 1.45; }
+.page-subtitle { margin-top: 0.68rem; max-width: 21rem; }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #f1f2ef;
+    --ink-soft: #aeb3b0;
+    --ink-faint: #797f7c;
+    --canvas: #171918;
+    --surface: rgba(37, 41, 39, 0.72);
+    --solid-surface: #202422;
+    --line: rgba(239, 242, 238, 0.1);
+    --focus: #84c5df;
+    --shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.24);
+    --shadow-float: 0 20px 48px rgba(0, 0, 0, 0.38), 0 2px 7px rgba(0, 0, 0, 0.16);
+  }
+}
