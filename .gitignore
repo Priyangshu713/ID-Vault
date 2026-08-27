@@ -51,3 +51,5 @@ service-account.json
 # Temporary test data & scratchpads
 scratchpad*
 *.tmp
+
+.vercel

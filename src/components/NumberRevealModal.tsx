@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Lock, ShieldCheck, Timer } from 'lucide-react'
 import { BottomSheet } from './BottomSheet'
 import type { VaultDocument } from '../data/types'
@@ -12,11 +12,11 @@ type NumberRevealModalProps = {
 }
 
 export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: NumberRevealModalProps) {
-  const { revealDocumentNumber, isDocumentRevealed, getRevealTimeRemaining, hideDocumentNumber, isVaultLocked } = useVault()
-  const [isRevealedLocally, setIsRevealedLocally] = useState(false)
-
-  const isRevealed = (!isVaultLocked && isDocumentRevealed(document.id)) || isRevealedLocally
-  const timeLeft = getRevealTimeRemaining(document.id) || timeoutSeconds
+  const { revealDocumentNumber, hideDocumentNumber, isVaultLocked } = useVault()
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(timeoutSeconds)
+  const [isRevealed, setIsRevealed] = useState<boolean>(true)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   // Compute full unmasked identifier for display
   const rawIdentifier =
@@ -28,26 +28,49 @@ export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: Nu
 
   const revealedNumber = formatRevealedIdentifier(rawIdentifier, document.visualType)
 
+  // Countdown timer lifecycle
+  useEffect(() => {
+    revealDocumentNumber(document.id, timeoutSeconds)
+    setIsRevealed(true)
+    setSecondsRemaining(timeoutSeconds)
+
+    const endTime = Date.now() + timeoutSeconds * 1000
+
+    const timer = window.setInterval(() => {
+      const remainingMs = endTime - Date.now()
+      const remainingSecs = Math.max(0, Math.ceil(remainingMs / 1000))
+      setSecondsRemaining(remainingSecs)
+
+      if (remainingSecs <= 0) {
+        clearInterval(timer)
+        hideDocumentNumber(document.id)
+        setIsRevealed(false)
+        onCloseRef.current()
+      }
+    }, 250)
+
+    return () => {
+      clearInterval(timer)
+      hideDocumentNumber(document.id)
+    }
+  }, [document.id, timeoutSeconds, revealDocumentNumber, hideDocumentNumber])
+
   // If vault locks, close and re-mask immediately
   useEffect(() => {
     if (isVaultLocked) {
-      setIsRevealedLocally(false)
-      onClose()
+      hideDocumentNumber(document.id)
+      setIsRevealed(false)
+      onCloseRef.current()
     }
-  }, [isVaultLocked, onClose])
-
-  const handleConfirmReveal = () => {
-    revealDocumentNumber(document.id, timeoutSeconds)
-    setIsRevealedLocally(true)
-  }
+  }, [isVaultLocked, document.id, hideDocumentNumber])
 
   const handleHideAndClose = () => {
     hideDocumentNumber(document.id)
-    setIsRevealedLocally(false)
+    setIsRevealed(false)
     onClose()
   }
 
-  const progressPercent = ((timeoutSeconds - timeLeft) / timeoutSeconds) * 100
+  const progressPercent = Math.max(0, Math.min(100, ((timeoutSeconds - secondsRemaining) / timeoutSeconds) * 100))
 
   return (
     <BottomSheet
@@ -71,14 +94,14 @@ export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: Nu
 
             <div className="reveal-current-masked">
               <small>Currently Protected</small>
-              <span className="masked-display">{document.maskedIdentifier || document.maskedNumber || '•••• •••• ••••'}</span>
+              <span className="masked-display">{document.maskedIdentifier || document.maskedNumber || 'XXXX XXXX XXXX'}</span>
             </div>
 
             <div className="sheet-button-stack">
               <button
                 type="button"
                 className="primary-button primary-button--full reveal-trigger-btn"
-                onClick={handleConfirmReveal}
+                onClick={() => setIsRevealed(true)}
               >
                 <Eye size={18} />
                 <span>Reveal for {timeoutSeconds} seconds</span>
@@ -94,14 +117,17 @@ export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: Nu
               <div className="countdown-header">
                 <span className="countdown-label">
                   <Timer size={14} />
-                  <span>Auto-masking in <strong>{timeLeft}s</strong></span>
+                  <span>Auto-masking in <strong>{secondsRemaining}s</strong></span>
                 </span>
-                <span className="countdown-seconds">{timeLeft}s remaining</span>
+                <span className="countdown-seconds">{secondsRemaining}s remaining</span>
               </div>
               <div className="countdown-bar-track">
                 <div
                   className="countdown-bar-fill"
-                  style={{ width: `${Math.max(0, 100 - progressPercent)}%` }}
+                  style={{
+                    width: `${Math.max(0, 100 - progressPercent)}%`,
+                    transition: 'width 0.25s linear',
+                  }}
                 />
               </div>
             </div>

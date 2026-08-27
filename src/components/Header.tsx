@@ -22,32 +22,11 @@ export function Header({ user, onSearch, onProfile, onHome }: HeaderProps) {
       const header = headerRef.current
       if (!header) return
 
-      const soften = () =>
-        gsap.to(header, {
-          backgroundColor: 'rgba(247, 246, 243, 0.78)',
-          backdropFilter: 'blur(18px) saturate(135%)',
-          borderColor: 'rgba(29, 33, 36, 0.08)',
-          boxShadow: '0 8px 22px rgba(30, 31, 30, 0.045)',
-          duration: 0.26,
-          ease: 'power2.out',
-          overwrite: 'auto',
-        })
-      const clear = () =>
-        gsap.to(header, {
-          backgroundColor: 'rgba(247, 246, 243, 0)',
-          backdropFilter: 'blur(0px) saturate(100%)',
-          borderColor: 'rgba(29, 33, 36, 0)',
-          boxShadow: '0 0 0 rgba(30, 31, 30, 0)',
-          duration: 0.24,
-          ease: 'power2.out',
-          overwrite: 'auto',
-        })
-
       ScrollTrigger.create({
         start: 12,
         end: 'max',
-        onEnter: soften,
-        onLeaveBack: clear,
+        onEnter: () => header.classList.add('top-bar--scrolled'),
+        onLeaveBack: () => header.classList.remove('top-bar--scrolled'),
       })
     },
     { scope: headerRef }

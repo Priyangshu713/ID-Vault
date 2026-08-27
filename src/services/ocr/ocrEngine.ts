@@ -39,6 +39,9 @@ async function getWorker(): Promise<any> {
       const worker = await createWorker('eng', 1, {
         logger: () => {}, // Suppress noisy logs
       })
+      await worker.setParameters({
+        preserve_interword_spaces: '1',
+      })
       return worker
     })()
   }
@@ -47,7 +50,7 @@ async function getWorker(): Promise<any> {
 
 /**
  * High-fidelity temporary canvas image preprocessing.
- * Applies mild contrast stretch and luminance normalization without destroying thin fonts.
+ * Scales document for maximum character clarity and applies balanced contrast without destroying digits.
  */
 async function preprocessImagePass1(dataUrl: string): Promise<string> {
   return new Promise((resolve) => {
@@ -56,44 +59,62 @@ async function preprocessImagePass1(dataUrl: string): Promise<string> {
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
         if (!ctx) {
           resolve(dataUrl)
           return
         }
 
-        // Limit maximum dimension to 1800px for sharpness
-        const maxDim = 1800
-        let { width, height } = img
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width)
-            width = maxDim
+        // Upscale small card images for crisp character recognition
+        let targetWidth = img.width
+        let targetHeight = img.height
+
+        if (targetWidth < 1400 && targetHeight < 1400) {
+          const scale = Math.min(2.2, 1800 / Math.max(targetWidth, targetHeight))
+          targetWidth = Math.round(targetWidth * scale)
+          targetHeight = Math.round(targetHeight * scale)
+        } else if (targetWidth > 2600 || targetHeight > 2600) {
+          const maxDim = 2400
+          if (targetWidth > targetHeight) {
+            targetHeight = Math.round((targetHeight * maxDim) / targetWidth)
+            targetWidth = maxDim
           } else {
-            width = Math.round((width * maxDim) / height)
-            height = maxDim
+            targetWidth = Math.round((targetWidth * maxDim) / targetHeight)
+            targetHeight = maxDim
           }
         }
 
-        canvas.width = width
-        canvas.height = height
-        ctx.drawImage(img, 0, 0, width, height)
+        canvas.width = targetWidth
+        canvas.height = targetHeight
 
-        const imgData = ctx.getImageData(0, 0, width, height)
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+
+        const imgData = ctx.getImageData(0, 0, targetWidth, targetHeight)
         const d = imgData.data
 
-        // Mild adaptive contrast stretch
+        // Grayscale conversion with subtle local contrast enhancement
         for (let i = 0; i < d.length; i += 4) {
-          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-          // Boost clarity of dark text on light backgrounds
-          const enhanced = lum < 140 ? Math.max(0, lum * 0.85) : Math.min(255, lum * 1.08)
-          d[i] = enhanced
-          d[i + 1] = enhanced
-          d[i + 2] = enhanced
+          const r = d[i]
+          const g = d[i + 1]
+          const b = d[i + 2]
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b
+
+          let finalVal = gray
+          if (gray < 160) {
+            finalVal = gray * 0.90
+          } else {
+            finalVal = Math.min(255, gray * 1.05)
+          }
+
+          d[i] = finalVal
+          d[i + 1] = finalVal
+          d[i + 2] = finalVal
         }
 
         ctx.putImageData(imgData, 0, 0)
-        resolve(canvas.toDataURL('image/jpeg', 0.9))
+        resolve(canvas.toDataURL('image/png'))
       } catch {
         resolve(dataUrl)
       }
@@ -104,38 +125,53 @@ async function preprocessImagePass1(dataUrl: string): Promise<string> {
 }
 
 /**
- * Secondary high-contrast binarization pass for blurry or low-light documents.
+ * Crops a targeted relative region of an image and optimizes it for OCR recognition.
  */
-async function preprocessImagePass2(dataUrl: string): Promise<string> {
+async function cropImageRegion(
+  dataUrl: string,
+  relX: number,
+  relY: number,
+  relW: number,
+  relH: number
+): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
         if (!ctx) {
           resolve(dataUrl)
           return
         }
 
-        canvas.width = img.width
-        canvas.height = img.height
-        ctx.drawImage(img, 0, 0)
+        const sx = Math.max(0, Math.floor(img.width * relX))
+        const sy = Math.max(0, Math.floor(img.height * relY))
+        const sw = Math.min(img.width - sx, Math.floor(img.width * relW))
+        const sh = Math.min(img.height - sy, Math.floor(img.height * relH))
+
+        const scale = Math.max(2.0, 1400 / sw)
+        canvas.width = Math.round(sw * scale)
+        canvas.height = Math.round(sh * scale)
+
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
 
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
         const d = imgData.data
 
         for (let i = 0; i < d.length; i += 4) {
           const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-          const val = lum < 125 ? 0 : 255
-          d[i] = val
-          d[i + 1] = val
-          d[i + 2] = val
+          const enhanced = lum < 155 ? lum * 0.88 : Math.min(255, lum * 1.06)
+          d[i] = enhanced
+          d[i + 1] = enhanced
+          d[i + 2] = enhanced
         }
 
         ctx.putImageData(imgData, 0, 0)
-        resolve(canvas.toDataURL('image/jpeg', 0.9))
+        resolve(canvas.toDataURL('image/png'))
       } catch {
         resolve(dataUrl)
       }
@@ -146,11 +182,12 @@ async function preprocessImagePass2(dataUrl: string): Promise<string> {
 }
 
 /**
- * Executes local OCR with automatic two-pass fallback.
+ * Executes local OCR with targeted multi-region scanning for ID cards.
  */
 export async function runLocalOCR(
   imageDataUrl: string,
-  onProgress?: OCRProgressCallback
+  onProgress?: OCRProgressCallback,
+  side?: 'front' | 'back' | 'page'
 ): Promise<{ text: string; confidence: number; lines: string[]; structuredLines: OCRLine[] }> {
   onProgress?.('Preparing image for analysis...', 20)
 
@@ -163,15 +200,47 @@ export async function runLocalOCR(
     let text = ret.data.text || ''
     let confidence = ret.data.confidence || 0
 
-    // If Pass 1 yielded weak text (e.g. confidence < 60 or less than 20 chars), run Pass 2
-    if (confidence < 60 || text.trim().length < 25) {
-      onProgress?.('Enhancing image contrast for pass 2...', 70)
-      const pass2Url = await preprocessImagePass2(imageDataUrl)
-      const ret2 = await worker.recognize(pass2Url)
-      if ((ret2.data.text || '').trim().length > text.trim().length) {
-        ret = ret2
-        text = ret.data.text || ''
-        confidence = ret.data.confidence || 0
+    let lines = text
+      .split('\n')
+      .map((l: string) => l.trim())
+      .filter((l: string) => l.length > 0)
+
+    // For Front Side of ID documents, perform targeted crops:
+    if (side === 'front' || !side) {
+      // Crop 1: Personal Details Block (Name, DOB, Gender)
+      try {
+        const detailsCropUrl = await cropImageRegion(imageDataUrl, 0.18, 0.10, 0.80, 0.50)
+        const retCrop = await worker.recognize(detailsCropUrl)
+        const cropText = retCrop.data.text || ''
+        const cropLines = cropText
+          .split('\n')
+          .map((l: string) => l.trim())
+          .filter((l: string) => l.length > 0)
+
+        if (cropLines.length > 0) {
+          lines = [...cropLines, ...lines]
+          text = `${cropText}\n\n${text}`
+        }
+      } catch {
+        // Continue
+      }
+
+      // Crop 2: Bottom Number Block (Aadhaar 12-digit UID)
+      try {
+        const numberCropUrl = await cropImageRegion(imageDataUrl, 0.08, 0.65, 0.84, 0.32)
+        const retNum = await worker.recognize(numberCropUrl)
+        const numText = retNum.data.text || ''
+        const numLines = numText
+          .split('\n')
+          .map((l: string) => l.trim())
+          .filter((l: string) => l.length > 0)
+
+        if (numLines.length > 0) {
+          lines = [...lines, ...numLines]
+          text = `${text}\n\n${numText}`
+        }
+      } catch {
+        // Continue
       }
     }
 
@@ -184,11 +253,6 @@ export async function runLocalOCR(
         bbox: w.bbox,
       })),
     }))
-
-    const lines = text
-      .split('\n')
-      .map((l: string) => l.trim())
-      .filter((l: string) => l.length > 0)
 
     onProgress?.('Text extracted successfully.', 100)
 
@@ -238,7 +302,7 @@ export async function runDocumentOCR(
     const ocr = await runLocalOCR(pageUrl, (stage, p) => {
       const overall = Math.round(((i + p / 100) / pages.length) * 100)
       onProgress?.(`${pageLabel}: ${stage}`, overall)
-    })
+    }, page.side)
 
     pageResults.push({
       pageNumber: page.order + 1,

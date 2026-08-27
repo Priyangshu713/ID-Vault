@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Edit3,
+  Eye,
+  EyeOff,
   FileCheck,
   FolderOpen,
   HelpCircle,
@@ -33,6 +35,7 @@ import {
 } from '../data/documentTypesRegistry'
 import { validateDocumentFile } from '../services/pdfNormalization'
 import { extractAndValidateDocumentPages } from '../services/documentValidation'
+import { maskIdentifier } from '../services/securityService'
 import { useVaultDocuments } from '../context/DocumentContext'
 import { DocumentComparisonSheet } from './DocumentComparisonSheet'
 import { intelligenceService } from '../services/intelligence/intelligenceService'
@@ -78,6 +81,7 @@ export function AddDocumentWizard({ onClose, onAddDocument }: AddDocumentWizardP
 
   const [maskedIdentifier, setMaskedIdentifier] = useState<string>('')
   const [actualIdentifier, setActualIdentifier] = useState<string>('')
+  const [isIdentifierRevealedInReview, setIsIdentifierRevealedInReview] = useState<boolean>(false)
   const [maskedIdentifierSource, setMaskedIdentifierSource] = useState<MetadataSource>('none')
   const [maskedIdentifierConf, setMaskedIdentifierConf] = useState<ConfidenceLevel>('unknown')
 
@@ -244,6 +248,9 @@ export function AddDocumentWizard({ onClose, onAddDocument }: AddDocumentWizardP
         setHolderName(result.holderName.value)
         setHolderNameSource('document')
         setHolderNameConf(result.holderName.confidence || 'medium')
+      }
+      if (result.documentIdentifier?.value && maskedIdentifierSource !== 'user') {
+        setActualIdentifier(result.documentIdentifier.value)
       }
       if (result.maskedIdentifier?.value && maskedIdentifierSource !== 'user') {
         setMaskedIdentifier(result.maskedIdentifier.value)
@@ -499,21 +506,30 @@ export function AddDocumentWizard({ onClose, onAddDocument }: AddDocumentWizardP
       const versionNum = isNewVersion && existingDoc ? (existingDoc.version || 1) + 1 : 1
       const logicalId = existingDoc ? existingDoc.logicalDocumentId : `logical-${config.type}-${Date.now()}`
 
-      const newDoc = await uploadDocument({
-        pages,
-        pageMode: config.pageMode,
-        category: selectedCategory,
-        visualType: config.visualType,
-        documentType: config.displayName,
-        displayName: config.displayName,
-        logicalDocumentId: logicalId,
-        documentHolderName: holderName.trim() || undefined,
-        documentHolderNameSource: holderNameSource,
-        maskedIdentifier: maskedIdentifier.trim() || undefined,
-        maskedIdentifierSource: maskedIdentifierSource,
-        actualIdentifier: actualIdentifier.trim() || undefined,
-        documentIdentifier: actualIdentifier.trim() || undefined,
-        documentIdentifierSource: maskedIdentifierSource,
+      // Always ensure maskedIdentifier is safely masked and actualIdentifier holds the full number
+        const resolvedActual =
+          actualIdentifier.trim() ||
+          (maskedIdentifier && !/[Xx\*\u2022]/.test(maskedIdentifier) ? maskedIdentifier.trim() : undefined)
+        const resolvedMasked =
+          maskIdentifier(resolvedActual || maskedIdentifier, config.visualType) ||
+          maskedIdentifier.trim() ||
+          undefined
+
+        const newDoc = await uploadDocument({
+          pages,
+          pageMode: config.pageMode,
+          category: selectedCategory,
+          visualType: config.visualType,
+          documentType: config.displayName,
+          displayName: config.displayName,
+          logicalDocumentId: logicalId,
+          documentHolderName: holderName.trim() || undefined,
+          documentHolderNameSource: holderNameSource,
+          maskedIdentifier: resolvedMasked,
+          maskedIdentifierSource: maskedIdentifierSource,
+          actualIdentifier: resolvedActual,
+          documentIdentifier: resolvedActual || resolvedMasked,
+          documentIdentifierSource: maskedIdentifierSource,
         dateOfBirth: dateOfBirth.trim() || undefined,
         dateOfBirthSource: dateOfBirthSource,
         gender: gender.trim() || undefined,
@@ -1155,22 +1171,73 @@ export function AddDocumentWizard({ onClose, onAddDocument }: AddDocumentWizardP
               <div className="review-field-group">
                 <div className="field-head-row">
                   <label htmlFor="identifierInput">Document Number</label>
-                  {renderConfidenceBadge(maskedIdentifierConf, Boolean(maskedIdentifier.trim()))}
+                  {renderConfidenceBadge(maskedIdentifierConf, Boolean((actualIdentifier || maskedIdentifier).trim()))}
                 </div>
                 <div className="field-input-wrap">
                   <input
                     id="identifierInput"
                     type="text"
                     className="review-text-input"
-                    value={maskedIdentifier}
+                    value={
+                      isIdentifierRevealedInReview
+                        ? actualIdentifier || maskedIdentifier
+                        : maskedIdentifier || maskIdentifier(actualIdentifier, config.visualType)
+                    }
                     placeholder="e.g. XXXX XXXX 2486"
                     onChange={(e) => {
-                      setMaskedIdentifier(e.target.value)
+                      const val = e.target.value
+                      const clean = val.trim()
                       setMaskedIdentifierSource('user')
+                      if (!/[Xx\*\u2022]/.test(clean) && clean.length > 0) {
+                        let formattedActual = clean
+                        if (config.visualType === 'aadhaar') {
+                          const digits = clean.replace(/\D/g, '')
+                          if (digits.length === 12) {
+                            formattedActual = `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)}`
+                          } else {
+                            formattedActual = digits
+                          }
+                        } else if (config.visualType === 'pan') {
+                          formattedActual = clean.replace(/\s+/g, '').toUpperCase()
+                        }
+                        setActualIdentifier(formattedActual)
+                        const computedMask = maskIdentifier(formattedActual, config.visualType)
+                        setMaskedIdentifier(computedMask)
+                        setMaskedIdentifierConf('high')
+                      } else {
+                        setMaskedIdentifier(val)
+                        const lastDigits = clean.replace(/\D/g, '')
+                        if (lastDigits.length >= 4 && actualIdentifier) {
+                          const actualDigits = actualIdentifier.replace(/\D/g, '')
+                          if (!actualDigits.endsWith(lastDigits.slice(-4))) {
+                            setActualIdentifier('')
+                          }
+                        }
+                        setMaskedIdentifierConf(clean.length > 0 ? 'high' : 'unknown')
+                      }
                     }}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setIsIdentifierRevealedInReview(!isIdentifierRevealedInReview)}
+                    title={isIdentifierRevealedInReview ? 'Mask number' : 'Show full number'}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '0 6px',
+                      cursor: 'pointer',
+                      color: 'var(--ink-soft, #64748b)',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {isIdentifierRevealedInReview ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
                   <Edit3 size={13} className="field-edit-icon" />
                 </div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--ink-muted, #94a3b8)', marginTop: '0.25rem', display: 'block' }}>
+                  🔒 Card displays masked ({maskIdentifier(actualIdentifier || maskedIdentifier, config.visualType) || 'XXXX XXXX 1234'}). Full number is protected and revealable anytime.
+                </span>
               </div>
 
               {/* Date of Birth Field (if detected or identity/transport) */}

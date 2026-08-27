@@ -72,7 +72,16 @@
   width: calc(100% + 2.4rem);
   margin: 0 -1.2rem;
   border-bottom: 1px solid transparent;
-  transition: all 0.24s ease;
+  background: transparent;
+  transition: background 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, backdrop-filter 0.24s ease;
+}
+
+.top-bar--scrolled {
+  background: rgba(247, 246, 243, 0.82);
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  border-bottom: 1px solid rgba(29, 33, 36, 0.08);
+  box-shadow: 0 8px 22px rgba(30, 31, 30, 0.045);
 }
 
 .top-bar__inner {
@@ -5967,31 +5976,153 @@ button.settings-row:active {
   .app-background,
   .detail-page {
     background:
-      radial-gradient(90% 42% at 92% -8%, rgba(54, 76, 71, 0.36), transparent 70%),
-      radial-gradient(68% 38% at -10% 23%, rgba(92, 72, 54, 0.22), transparent 72%),
-      var(--canvas);
+      radial-gradient(90% 42% at 92% -8%, rgba(36, 52, 48, 0.45), transparent 70%),
+      radial-gradient(68% 38% at -10% 23%, rgba(65, 48, 35, 0.25), transparent 72%),
+      #131615;
   }
+
+  /* Scrolled Top Bar Header */
+  .top-bar--scrolled {
+    background: rgba(19, 22, 21, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(18px) saturate(135%);
+    -webkit-backdrop-filter: blur(18px) saturate(135%);
+  }
+
+  .brand,
+  .brand span,
+  .icon-button,
+  .avatar-button {
+    color: #f1f2ef;
+  }
+
+  .brand:hover,
+  .icon-button:hover,
+  .avatar-button:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Category Chip Tabs */
+  .category-chip-rail {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(10px);
+  }
+
+  .category-chip {
+    color: #9aa4a0;
+  }
+
+  .category-chip:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .category-chip--active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Inline Add Document Button */
+  .inline-add-button {
+    background: rgba(132, 197, 223, 0.08);
+    border: 1px dashed rgba(132, 197, 223, 0.38);
+    color: #8ed3ec;
+  }
+
+  .inline-add-button:hover {
+    background: rgba(132, 197, 223, 0.16);
+    border-color: rgba(132, 197, 223, 0.6);
+    color: #bfe8f7;
+  }
+
+  /* Bottom Navigation */
+  .bottom-navigation {
+    background: rgba(24, 28, 26, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .nav-item {
+    color: #7b8580;
+  }
+
+  .nav-item:hover {
+    color: #cdd6d2;
+  }
+
+  .nav-item--active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .add-document-fab {
+    background: #327a8c;
+    color: #ffffff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+
+  .add-document-fab:hover {
+    background: #3f94a8;
+  }
+
+  /* Headers, Titles and Eyebrows */
+  .eyebrow {
+    color: #74b8cf;
+  }
+
+  .heading-with-badge h1,
+  .heading-with-badge h2,
+  .document-category-section__heading h2,
+  .page-title {
+    color: #f1f2ef;
+  }
+
+  .page-subtitle,
+  .greeting__copy,
+  .document-count-badge {
+    color: #9aa4a0;
+  }
+
+  /* Modals, Sheets & Windows */
   .bottom-sheet {
-    background: #1d2220;
+    background: #191e1c;
     color: #e5ece8;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
   }
+
   .detail-top-nav {
-    background: rgba(26, 31, 29, 0.85);
+    background: rgba(23, 28, 26, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
+
   .preview-modal-window {
-    background: #181d1b;
+    background: #151917;
+    border: 1px solid rgba(255, 255, 255, 0.12);
   }
+
   .preview-modal-header {
-    background: rgba(30, 36, 34, 0.9);
+    background: rgba(26, 32, 30, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
+
   .google-signin-button {
     background: linear-gradient(135deg, rgba(42, 48, 46, 0.95), rgba(30, 35, 33, 0.85));
     border-color: rgba(255, 255, 255, 0.15);
     color: #e8eee9;
   }
+
   .dev-modal-card {
-    background: #1e2422;
+    background: #1a201e;
     color: #e8eee9;
+    border: 1px solid rgba(255, 255, 255, 0.12);
   }
 }
 

@@ -17,6 +17,79 @@ export type ParsedDocumentMetadata = {
   detectedKeywords: string[]
 }
 
+// --- Verhoeff Checksum & Auto-Correction for Indian 12-Digit Identifiers ---
+const dTable = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+  [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+  [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+  [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+  [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+  [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+  [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+  [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+  [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+]
+
+const pTable = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+  [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+  [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+  [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+  [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+  [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+  [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
+]
+
+export function validateVerhoeff(numStr: string): boolean {
+  const digits = numStr.replace(/\D/g, '')
+  if (digits.length !== 12) return false
+
+  let c = 0
+  const reversed = digits.split('').reverse().map(Number)
+  for (let i = 0; i < reversed.length; i++) {
+    c = dTable[c][pTable[i % 8][reversed[i]]]
+  }
+  return c === 0
+}
+
+const DIGIT_OCR_CONFUSIONS: Record<string, string[]> = {
+  '0': ['9', '8', '6', '1'],
+  '9': ['0', '8', '3'],
+  '8': ['0', '9', '3', '6'],
+  '6': ['0', '5', '8'],
+  '5': ['6', '3', '9'],
+  '3': ['8', '9', '5'],
+  '1': ['7', '4'],
+  '7': ['1', '2'],
+  '2': ['7', '3'],
+  '4': ['1', '9'],
+}
+
+export function correctAadhaarVerhoeff(raw12Digits: string): string {
+  const clean = raw12Digits.replace(/\D/g, '')
+  if (clean.length !== 12) return clean
+
+  if (validateVerhoeff(clean)) {
+    return clean
+  }
+
+  // Try 1-digit confusion correction
+  for (let i = 0; i < clean.length; i++) {
+    const origChar = clean[i]
+    const alternates = DIGIT_OCR_CONFUSIONS[origChar] || []
+    for (const alt of alternates) {
+      const candidate = clean.slice(0, i) + alt + clean.slice(i + 1)
+      if (validateVerhoeff(candidate)) {
+        return candidate
+      }
+    }
+  }
+
+  return clean
+}
+
 const DISALLOWED_NAME_TOKENS = [
   'government',
   'govt',
@@ -44,6 +117,10 @@ const DISALLOWED_NAME_TOKENS = [
   'male',
   'female',
   'transgender',
+  'purush',
+  'mahila',
+  'gender',
+  'sex',
   'address',
   'help',
   'income',
@@ -71,11 +148,27 @@ const DISALLOWED_NAME_TOKENS = [
   'validity',
   'card',
   'mera',
+  'meri',
+  'pehchan',
+  'pechan',
   'pvc',
   'qr',
   'scan',
   'to',
   'digit',
+  'vid',
+  'janm',
+  'tithi',
+  'dinank',
+  'pata',
+  'praman',
+  'suchna',
+  'offline',
+  'xml',
+  'online',
+  'authentication',
+  'proof',
+  'citizenship',
 ]
 
 /**
@@ -83,10 +176,20 @@ const DISALLOWED_NAME_TOKENS = [
  */
 function cleanCandidateText(raw: string): string {
   return raw
-    .replace(/^[|\-_:.,~`'"]+/, '')
-    .replace(/[|\-_:.,~`'"]+$/, '')
+    .replace(/[^A-Za-z\s.]/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
+
+/**
+ * Formats name string to standard Title Case (e.g. "PRIYANGSHU DUTTA" -> "Priyangshu Dutta").
+ */
+function toTitleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 /**
@@ -96,14 +199,10 @@ function isBoilerplateLine(line: string): boolean {
   const cleaned = cleanCandidateText(line).toLowerCase()
   if (cleaned.length < 3) return true
 
-  const words = cleaned.split(/[\s/\\,]+/).filter((w) => w.length > 0)
+  const words = cleaned.split(/\s+/).filter((w) => w.length > 0)
   if (words.length === 0) return true
 
-  const stopCount = words.filter((w) =>
-    DISALLOWED_NAME_TOKENS.some((stop) => w === stop || w.includes(stop))
-  ).length
-
-  return stopCount >= Math.ceil(words.length * 0.6)
+  return words.some((w) => DISALLOWED_NAME_TOKENS.includes(w))
 }
 
 /**
@@ -112,13 +211,40 @@ function isBoilerplateLine(line: string): boolean {
 function isPlausiblePersonName(name: string): boolean {
   const cleaned = cleanCandidateText(name)
   if (cleaned.length < 3 || cleaned.length > 40) return false
-  if (isBoilerplateLine(cleaned)) return false
 
-  // Must contain only alphabetic characters, spaces, and periods
-  if (!/^[A-Za-z\s.]{3,40}$/.test(cleaned)) return false
+  const words = cleaned.split(/\s+/).filter((w) => w.length > 0)
+  if (words.length === 0 || words.length > 5) return false
 
-  const words = cleaned.split(/\s+/).filter((w) => w.length > 1)
-  return words.length >= 1 && words.length <= 5
+  const lowerWords = words.map((w) => w.toLowerCase())
+
+  // Disallow if ANY token matches a known stopword or gender
+  if (lowerWords.some((w) => DISALLOWED_NAME_TOKENS.includes(w))) {
+    return false
+  }
+
+  // Each word must have at least one vowel (unless it's a single capital initial like "P.")
+  for (const w of words) {
+    const pure = w.replace(/[^A-Za-z]/g, '')
+    if (pure.length === 1 && !/^[A-Z]$/.test(pure)) return false
+    if (pure.length >= 2 && !/[aeiouyAEIOUY]/.test(pure)) return false
+  }
+
+  // Disallow all-caps short noise sequences like "TID ITNT HAA" or "IIT HAA"
+  if (cleaned === cleaned.toUpperCase()) {
+    const isAllShort = words.every((w) => w.length <= 4)
+    if (isAllShort && words.length >= 2) {
+      return false
+    }
+  }
+
+  // Must have at least one substantial word (length >= 3 with vowels)
+  const hasSubstantialWord = words.some((w) => {
+    const pure = w.replace(/[^A-Za-z]/g, '')
+    return pure.length >= 3 && /[aeiouyAEIOUY]/.test(pure)
+  })
+  if (!hasSubstantialWord) return false
+
+  return true
 }
 
 // --------------------------------------------------------------------------
@@ -129,6 +255,7 @@ export function parseAadhaar(ocr: OCRResult): ParsedDocumentMetadata {
   const lowerText = allText.toLowerCase()
   const frontPage = ocr.pages.find((p) => p.side === 'front') || ocr.pages[0]
   const backPage = ocr.pages.find((p) => p.side === 'back') || (ocr.pages.length > 1 ? ocr.pages[1] : undefined)
+  const linesToScan = frontPage ? frontPage.lines : ocr.pages.flatMap((p) => p.lines)
 
   const detectedKeywords: string[] = []
   const aadhaarKeywords = [
@@ -152,24 +279,97 @@ export function parseAadhaar(ocr: OCRResult): ParsedDocumentMetadata {
     detectedKeywords,
   }
 
-  // 1. Aadhaar Number (12 digits, often formatted as 4-4-4)
-  const uidRegex = /\b([2-9]\d{3}\s?\d{4}\s?\d{4})\b/
-  const numMatch = allText.match(uidRegex)
-  if (numMatch) {
-    const rawNum = numMatch[1].replace(/\s+/g, '')
-    if (rawNum.length === 12) {
-      const formatted = `${rawNum.slice(0, 4)} ${rawNum.slice(4, 8)} ${rawNum.slice(8, 12)}`
-      result.documentIdentifier = {
-        value: formatted,
-        source: 'document',
-        confidence: 'high',
-        evidence: `Detected 12-digit Aadhaar: "${numMatch[0]}"`,
+  // 1. Aadhaar Number (Multi-Strategy: Standard UID, 3x 4-digit groups, OCR confusion normalization, Masked UID)
+  let detectedUid: { formatted: string; masked: string; evidence: string } | null = null
+
+  // Strategy 1A: Standard 12-digit UID pattern
+  const uid12Regex = /\b([2-9]\d{3}[\s.\-_]?\d{4}[\s.\-_]?\d{4})\b|\b([2-9]\d{11})\b/
+  const m1 = allText.match(uid12Regex)
+  if (m1) {
+    const raw = (m1[1] || m1[2]).replace(/\D/g, '')
+    if (raw.length === 12) {
+      const corrected = correctAadhaarVerhoeff(raw)
+      detectedUid = {
+        formatted: `${corrected.slice(0, 4)} ${corrected.slice(4, 8)} ${corrected.slice(8, 12)}`,
+        masked: `XXXX XXXX ${corrected.slice(8, 12)}`,
+        evidence: m1[0],
       }
-      result.maskedIdentifier = {
-        value: `XXXX XXXX ${rawNum.slice(8, 12)}`,
-        source: 'document',
-        confidence: 'high',
+    }
+  }
+
+  // Strategy 1B: Scan all lines for three 4-digit groups
+  if (!detectedUid) {
+    for (const line of linesToScan) {
+      const cleaned = line.replace(/[^\d\sXx*•]/g, ' ').replace(/\s{2,}/g, ' ').trim()
+      const fourDigitGroups = cleaned.match(/\b\d{4}\b/g)
+      if (fourDigitGroups && fourDigitGroups.length >= 3) {
+        const candidateRaw = fourDigitGroups.slice(0, 3).join('')
+        if (/^[2-9]\d{11}$/.test(candidateRaw)) {
+          const corrected = correctAadhaarVerhoeff(candidateRaw)
+          detectedUid = {
+            formatted: `${corrected.slice(0, 4)} ${corrected.slice(4, 8)} ${corrected.slice(8, 12)}`,
+            masked: `XXXX XXXX ${corrected.slice(8, 12)}`,
+            evidence: line,
+          }
+          break
+        }
       }
+    }
+  }
+
+  // Strategy 1C: Normalize OCR character confusions (e.g. O->0, l/I->1, S->5, b->6, B->8, Z->2)
+  if (!detectedUid) {
+    for (const line of linesToScan) {
+      const normalized = line
+        .replace(/[oO]/g, '0')
+        .replace(/[Il|]/g, '1')
+        .replace(/[Zz]/g, '2')
+        .replace(/[sS]/g, '5')
+        .replace(/[b]/g, '6')
+        .replace(/[B]/g, '8')
+
+      const mNorm = normalized.match(/\b([2-9]\d{3}[\s.\-_]?\d{4}[\s.\-_]?\d{4})\b|\b([2-9]\d{11})\b/)
+      if (mNorm) {
+        const raw = (mNorm[1] || mNorm[2]).replace(/\D/g, '')
+        if (raw.length === 12) {
+          const corrected = correctAadhaarVerhoeff(raw)
+          detectedUid = {
+            formatted: `${corrected.slice(0, 4)} ${corrected.slice(4, 8)} ${corrected.slice(8, 12)}`,
+            masked: `XXXX XXXX ${corrected.slice(8, 12)}`,
+            evidence: line,
+          }
+          break
+        }
+      }
+    }
+  }
+
+  // Strategy 1D: Masked UID pattern (XXXX XXXX 1234)
+  if (!detectedUid) {
+    const maskedUidRegex = /\b([Xx*•]{4}[\s.\-_]?[Xx*•]{4}[\s.\-_]?\d{4})\b/i
+    const mMask = allText.match(maskedUidRegex)
+    if (mMask) {
+      const digitsOnly = mMask[1].replace(/\D/g, '')
+      const last4 = digitsOnly.slice(-4)
+      detectedUid = {
+        formatted: `XXXX XXXX ${last4}`,
+        masked: `XXXX XXXX ${last4}`,
+        evidence: mMask[0],
+      }
+    }
+  }
+
+  if (detectedUid) {
+    result.documentIdentifier = {
+      value: detectedUid.formatted,
+      source: 'document',
+      confidence: 'high',
+      evidence: `Detected Aadhaar number: "${detectedUid.formatted}"`,
+    }
+    result.maskedIdentifier = {
+      value: detectedUid.masked,
+      source: 'document',
+      confidence: 'high',
     }
   }
 
@@ -218,61 +418,55 @@ export function parseAadhaar(ocr: OCRResult): ParsedDocumentMetadata {
   }
 
   // 4. Candidate Name Scoring Engine for Front Page
-  const linesToScan = frontPage ? frontPage.lines : ocr.pages.flatMap((p) => p.lines)
-  type ScoredCandidate = { name: string; score: number; evidence: string }
-  const candidates: ScoredCandidate[] = []
-
+  // Step 4A: Check for lines immediately above DOB line (highest spatial certainty on Indian Aadhaar)
+  let dobLineIndex = -1
   for (let i = 0; i < linesToScan.length; i++) {
-    const rawLine = linesToScan[i]
-    let cleaned = cleanCandidateText(rawLine)
-
-    // Strip prefixes like "Name:", "To,", "To ", etc.
-    cleaned = cleaned.replace(/^(?:Name|To|Holder)\s*[:\-,]?\s*/i, '').trim()
-
-    if (!isPlausiblePersonName(cleaned)) continue
-
-    let score = 30 // Base score for valid alphabetic line
-    let evidence = `Line ${i + 1}: "${cleaned}"`
-
-    // Check adjacent lines for DOB, Gender, or Government header
-    const prevLine = linesToScan[i - 1]?.toLowerCase() || ''
-    const nextLine = linesToScan[i + 1]?.toLowerCase() || ''
-    const nextNextLine = linesToScan[i + 2]?.toLowerCase() || ''
-
-    if (nextLine.includes('dob') || nextLine.includes('birth') || nextLine.includes('जन्म') || /\d{2}\/\d{2}\/\d{4}/.test(nextLine)) {
-      score += 50
-      evidence = `Found directly above DOB line: "${cleaned}"`
-    } else if (nextNextLine.includes('dob') || nextNextLine.includes('birth') || /\d{2}\/\d{2}\/\d{4}/.test(nextNextLine)) {
-      score += 35
+    const l = linesToScan[i].toLowerCase()
+    if (l.includes('dob') || l.includes('birth') || l.includes('जन्म') || /\d{2}[/-]\d{2}[/-]\d{4}/.test(l)) {
+      dobLineIndex = i
+      break
     }
-
-    if (nextLine.includes('male') || nextLine.includes('female') || nextLine.includes('पुरुष') || nextLine.includes('महिला')) {
-      score += 30
-    }
-
-    if (prevLine.includes('government') || prevLine.includes('india') || prevLine.includes('bharat') || prevLine.includes('uidai')) {
-      score += 25
-    }
-
-    // Capitalization & multi-word structure bonuses
-    const words = cleaned.split(/\s+/)
-    if (words.length >= 2 && words.length <= 4) score += 20
-    if (cleaned === cleaned.toUpperCase() && cleaned.length >= 6) score += 15
-    if (/^[A-Z][a-z]+(\s[A-Z][a-z]+)+$/.test(cleaned)) score += 15
-
-    candidates.push({ name: cleaned, score, evidence })
   }
 
-  // Sort candidates by score descending
-  candidates.sort((a, b) => b.score - a.score)
+  let extractedName: string | undefined
 
-  if (candidates.length > 0 && candidates[0].score >= 40) {
-    const winner = candidates[0]
+  if (dobLineIndex > 0) {
+    for (let j = dobLineIndex - 1; j >= Math.max(0, dobLineIndex - 3); j--) {
+      const rawLine = linesToScan[j]
+      const cleaned = cleanCandidateText(rawLine).replace(/^(?:Name|To|Holder)\s*[:\-,]?\s*/i, '').trim()
+
+      const latinMatch = cleaned.match(/([A-Za-z]{2,}(?:\s+[A-Za-z]{2,})+)/)
+      const candidate = latinMatch ? latinMatch[1].trim() : cleaned
+
+      if (isPlausiblePersonName(candidate)) {
+        extractedName = toTitleCase(candidate)
+        break
+      }
+    }
+  }
+
+  // Step 4B: Scan all lines if above DOB line wasn't found
+  if (!extractedName) {
+    for (let i = 0; i < linesToScan.length; i++) {
+      const rawLine = linesToScan[i]
+      const cleaned = cleanCandidateText(rawLine).replace(/^(?:Name|To|Holder)\s*[:\-,]?\s*/i, '').trim()
+
+      const latinMatch = cleaned.match(/([A-Za-z]{2,}(?:\s+[A-Za-z]{2,})+)/)
+      const candidate = latinMatch ? latinMatch[1].trim() : cleaned
+
+      if (isPlausiblePersonName(candidate)) {
+        extractedName = toTitleCase(candidate)
+        break
+      }
+    }
+  }
+
+  if (extractedName) {
     result.holderName = {
-      value: winner.name,
+      value: extractedName,
       source: 'document',
-      confidence: winner.score >= 70 ? 'high' : 'medium',
-      evidence: winner.evidence,
+      confidence: 'high',
+      evidence: `Detected cardholder name: "${extractedName}"`,
     }
   }
 

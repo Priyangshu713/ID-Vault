@@ -13,25 +13,25 @@ import type { ActivityAction, ActivityItem, DocumentVisualType } from '../data/t
 // --- 1. Identifier Masking Utilities ---
 
 export function maskIdentifier(value: string | undefined | null, visualType?: DocumentVisualType): string {
-  if (!value || typeof value !== 'string') {
-    return '•••• •••• ••••'
+  if (!value || typeof value !== "string") {
+    return ""
   }
 
-  const clean = value.replace(/\s+/g, '').trim()
-  if (clean.length === 0) return '•••• •••• ••••'
+  const clean = value.replace(/\s+/g, "").trim()
+  if (clean.length === 0) return ""
 
   switch (visualType) {
-    case 'aadhaar': {
+    case "aadhaar": {
       // 12-digit Aadhaar -> XXXX XXXX 1234
-      const digits = clean.replace(/\D/g, '')
+      const digits = clean.replace(/\D/g, "")
       if (digits.length >= 4) {
         const last4 = digits.slice(-4)
         return `XXXX XXXX ${last4}`
       }
-      return 'XXXX XXXX ••••'
+      return clean.length >= 4 ? `XXXX XXXX ${clean.slice(-4)}` : "XXXX XXXX"
     }
 
-    case 'pan': {
+    case "pan": {
       // 10-char PAN -> XXXXX1234X
       if (clean.length === 10) {
         const last5 = clean.slice(-5)
@@ -40,33 +40,33 @@ export function maskIdentifier(value: string | undefined | null, visualType?: Do
       if (clean.length >= 4) {
         return `XXXXX${clean.slice(-4)}`
       }
-      return 'XXXXX••••X'
+      return clean
     }
 
-    case 'driving-licence': {
+    case "driving-licence": {
       // DL -> XXXXXXXX1234
       if (clean.length >= 4) {
         const last4 = clean.slice(-4)
         return `XXXXXXXX${last4}`
       }
-      return 'XXXXXXXX••••'
+      return clean
     }
 
-    case 'passport': {
+    case "passport": {
       // Passport -> XXXXXXX123
       if (clean.length >= 3) {
         const last3 = clean.slice(-3)
         return `XXXXXXX${last3}`
       }
-      return 'XXXXXXX•••'
+      return clean
     }
 
-    case 'voter-id': {
+    case "voter-id": {
       // Voter ID -> XXXXXXX123
       if (clean.length >= 3) {
         return `XXXXXXX${clean.slice(-3)}`
       }
-      return 'XXXXXXX•••'
+      return clean
     }
 
     default: {
@@ -74,9 +74,9 @@ export function maskIdentifier(value: string | undefined | null, visualType?: Do
       if (clean.length > 4) {
         const last4 = clean.slice(-4)
         const maskedLength = Math.min(clean.length - 4, 8)
-        return `${'•'.repeat(maskedLength)} ${last4}`
+        return `${"X".repeat(maskedLength)} ${last4}`
       }
-      return '•••• ••••'
+      return clean
     }
   }
 }
@@ -85,46 +85,33 @@ export function formatRevealedIdentifier(
   value: string | undefined | null,
   visualType?: DocumentVisualType
 ): string {
-  if (!value || typeof value !== 'string') {
-    return '1234 5678 9012'
+  if (!value || typeof value !== "string") {
+    return "Not recorded"
   }
 
   const clean = value.trim()
-  if (clean.length === 0) return '1234 5678 9012'
+  if (clean.length === 0) return "Not recorded"
 
-  // If the raw value still contains mask placeholder characters
-  if (clean.includes('X') || clean.includes('•')) {
-    const lastDigits = clean.replace(/\D/g, '')
-    const suffix = lastDigits.slice(-4) || '1234'
-    if (visualType === 'aadhaar') {
-      return `5489 2710 ${suffix}`
-    } else if (visualType === 'pan') {
-      return `ABCDE${suffix.slice(-4)}F`
-    } else if (visualType === 'driving-licence') {
-      return `DL-042011${suffix}`
-    } else if (visualType === 'passport') {
-      return `Z${suffix}892`
-    } else if (visualType === 'voter-id') {
-      return `ABC${suffix}891`
-    }
-    return `5489 2710 ${suffix}`
+  // If the raw value still contains mask placeholder characters (X, x, *, •), return the clean value as-is (do NOT invent dummy numbers)
+  if (/[Xx\*\u2022]/.test(clean)) {
+    return clean
   }
 
   // Format standard unmasked identifiers cleanly
   switch (visualType) {
-    case 'aadhaar': {
-      const digits = clean.replace(/\D/g, '')
+    case "aadhaar": {
+      const digits = clean.replace(/\D/g, "")
       if (digits.length === 12) {
         return `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)}`
       }
       return clean
     }
-    case 'pan': {
-      return clean.toUpperCase()
+    case "pan": {
+      return clean.replace(/\s+/g, "").toUpperCase()
     }
-    case 'driving-licence':
-    case 'passport':
-    case 'voter-id':
+    case "driving-licence":
+    case "passport":
+    case "voter-id":
     default:
       return clean
   }
