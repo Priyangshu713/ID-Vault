@@ -18,7 +18,7 @@
 .detail-page {
   min-height: 100svh;
   position: relative;
-  overflow-x: clip;
+  overflow-x: hidden;
   background:
     radial-gradient(90% 42% at 92% -8%, rgba(196, 214, 208, 0.42), transparent 70%),
     radial-gradient(68% 38% at -10% 23%, rgba(237, 217, 199, 0.28), transparent 72%),
@@ -345,9 +345,13 @@
   margin: 0 -1.2rem;
   padding: 0.3rem 1.2rem 1.1rem;
   overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scroll-snap-type: x mandatory;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .document-rail::-webkit-scrollbar {
@@ -393,6 +397,8 @@
   transform-origin: center bottom;
   touch-action: pan-x pan-y;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .document-card::before {
@@ -517,6 +523,9 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+  touch-action: pan-x pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .document-card__topline {
@@ -1097,9 +1106,10 @@
   margin: 0 -1.2rem;
   padding: 0.2rem 1.2rem 1rem;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
   overscroll-behavior-y: auto;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
   touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;

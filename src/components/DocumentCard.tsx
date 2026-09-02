@@ -53,18 +53,6 @@ export function DocumentCard({
     })
   }
 
-  const handleTouchMove = (event: PointerEvent<HTMLElement>) => {
-    if (event.pointerType !== 'touch' || !cardRef.current) return
-    const rect = cardRef.current.getBoundingClientRect()
-    const progress = (event.clientX - rect.left) / rect.width - 0.5
-    gsap.to(cardRef.current.querySelector('.document-card__visual'), {
-      x: progress * 8,
-      duration: 0.28,
-      ease: 'power2.out',
-      overwrite: 'auto',
-    })
-  }
-
   const holderName = document.documentHolderName || document.ownerName || 'Not detected'
   const identifier = document.maskedIdentifier || document.maskedNumber
 
@@ -72,16 +60,13 @@ export function DocumentCard({
     <article
       ref={cardRef}
       className={`document-card document-card--${document.visualType} ${large ? 'document-card--large' : ''}`}
-      onPointerEnter={() => cardRef.current && liftCard(cardRef.current)}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && cardRef.current && liftCard(cardRef.current)}
       onPointerMove={handlePointerMove}
-      onPointerLeave={() => cardRef.current && settleCard(cardRef.current)}
-      onPointerDown={() => cardRef.current && gsap.to(cardRef.current, { scale: 0.982, duration: 0.12, overwrite: 'auto' })}
-      onPointerUp={() => cardRef.current && settleCard(cardRef.current)}
-      onPointerCancel={() => cardRef.current && settleCard(cardRef.current)}
-      onPointerMoveCapture={handleTouchMove}
+      onPointerLeave={(e) => e.pointerType === 'mouse' && cardRef.current && settleCard(cardRef.current)}
       style={{ '--card-index': index } as React.CSSProperties}
     >
       <button
+        type="button"
         className="document-card__open"
         onClick={() => onOpen(document)}
         aria-label={`Open ${document.name}`}
@@ -115,6 +100,7 @@ export function DocumentCard({
       </button>
       {onToggleFavourite && (
         <button
+          type="button"
           className={`document-card__favourite ${document.favourite ? 'document-card__favourite--active' : ''}`}
           onClick={(e) => {
             e.stopPropagation()
