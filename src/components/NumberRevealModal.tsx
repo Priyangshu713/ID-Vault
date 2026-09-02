@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Lock, ShieldCheck, Timer } from 'lucide-react'
+import { Check, Edit3, Eye, EyeOff, Lock, ShieldCheck, Timer } from 'lucide-react'
 import { BottomSheet } from './BottomSheet'
 import type { VaultDocument } from '../data/types'
 import { useVault } from '../context/VaultContext'
-import { formatRevealedIdentifier } from '../services/securityService'
+import { useVaultDocuments } from '../context/DocumentContext'
+import { formatRevealedIdentifier, maskIdentifier } from '../services/securityService'
 
 type NumberRevealModalProps = {
   document: VaultDocument
@@ -13,8 +14,14 @@ type NumberRevealModalProps = {
 
 export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: NumberRevealModalProps) {
   const { revealDocumentNumber, hideDocumentNumber, isVaultLocked } = useVault()
+  const { updateDocument } = useVaultDocuments()
   const [secondsRemaining, setSecondsRemaining] = useState<number>(timeoutSeconds)
   const [isRevealed, setIsRevealed] = useState<boolean>(true)
+  const [isEditing, setIsEditing] = useState<boolean>(false)
+  const [manualInput, setManualInput] = useState<string>('')
+  const [isSaving, setIsSaving] = useState<boolean>(false)
+  const [saveSuccess, setSaveSuccess] = useState<boolean>(false)
+
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
@@ -27,6 +34,7 @@ export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: Nu
     document.maskedNumber
 
   const revealedNumber = formatRevealedIdentifier(rawIdentifier, document.visualType)
+  const isMaskedFallback = /[Xx*\u2022]/.test(revealedNumber)
 
   // Countdown timer lifecycle
   useEffect(() => {
@@ -68,6 +76,37 @@ export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: Nu
     hideDocumentNumber(document.id)
     setIsRevealed(false)
     onClose()
+  }
+
+  const handleSaveManualNumber = async () => {
+    const trimmed = manualInput.trim().toUpperCase()
+    if (!trimmed) return
+
+    setIsSaving(true)
+    try {
+      let formattedActual = trimmed
+      if (document.visualType === 'aadhaar') {
+        const digits = trimmed.replace(/\D/g, '')
+        formattedActual = digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim()
+      } else if (document.visualType === 'pan') {
+        formattedActual = trimmed.replace(/[^A-Z0-9]/g, '')
+      }
+
+      const computedMask = maskIdentifier(formattedActual, document.visualType)
+
+      await updateDocument(document.id, {
+        actualIdentifier: formattedActual,
+        documentIdentifier: formattedActual,
+        maskedIdentifier: computedMask,
+        maskedNumber: computedMask,
+      })
+
+      setSaveSuccess(true)
+      setIsEditing(false)
+      setTimeout(() => setSaveSuccess(false), 2500)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const progressPercent = Math.max(0, Math.min(100, ((timeoutSeconds - secondsRemaining) / timeoutSeconds) * 100))
@@ -148,7 +187,82 @@ export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: Nu
               </div>
             </div>
 
-            <div className="sheet-button-stack">
+            {/* Inline sync & unmasked number prompt if masked or requested */}
+            {(isMaskedFallback || isEditing) && (
+              <div
+                className="reveal-sync-prompt glass-surface"
+                style={{
+                  marginTop: '0.85rem',
+                  padding: '0.85rem',
+                  borderRadius: '0.9rem',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                }}
+              >
+                <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', margin: '0 0 0.55rem 0', lineHeight: 1.4 }}>
+                  {isMaskedFallback
+                    ? 'ℹ️ Your full unmasked number wasn\'t synced from the original upload. Enter it once below to securely store and sync it across all your devices:'
+                    : 'Update your unmasked identifier to sync across devices:'}
+                </p>
+                <div style={{ display: 'flex', gap: '0.45rem' }}>
+                  <input
+                    type="text"
+                    value={manualInput}
+                    onChange={(e) => setManualInput(e.target.value)}
+                    placeholder={
+                      document.visualType === 'aadhaar'
+                        ? 'e.g. 6160 6593 1237'
+                        : document.visualType === 'pan'
+                        ? 'e.g. ABCDE1234F'
+                        : 'Enter full identifier'
+                    }
+                    style={{
+                      flex: 1,
+                      padding: '0.45rem 0.75rem',
+                      borderRadius: '0.65rem',
+                      border: '1px solid var(--line)',
+                      background: 'var(--surface)',
+                      color: 'var(--ink)',
+                      fontSize: '0.84rem',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={isSaving || !manualInput.trim()}
+                    onClick={handleSaveManualNumber}
+                    style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                  >
+                    {isSaving ? 'Saving...' : saveSuccess ? <Check size={16} /> : 'Save & Sync'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!isMaskedFallback && !isEditing && (
+              <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--ink-faint)',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                  }}
+                >
+                  <Edit3 size={12} />
+                  <span>Update or edit number</span>
+                </button>
+              </div>
+            )}
+
+            <div className="sheet-button-stack" style={{ marginTop: '1rem' }}>
               <button
                 type="button"
                 className="primary-button primary-button--full"

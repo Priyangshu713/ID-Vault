@@ -69,7 +69,7 @@ let inMemoryDocs: VaultDocument[] | null = null
 /**
  * Diagnostic logger for Vault lifecycle (avoids sensitive tokens or numbers).
  */
-function vaultLog(stage: string, detail?: string | number) {
+function vaultLog(stage: string, detail?: any) {
   if (import.meta.env.DEV) {
     if (detail !== undefined) {
       console.log(`[Vault] ${stage}:`, detail)
@@ -87,7 +87,7 @@ function mapDriveFileToVaultDocument(
   folderMap?: VaultStorageFolders,
   localCacheMap?: Map<string, VaultDocument>
 ): VaultDocument {
-  const props = file.appProperties || {}
+  const props = { ...(file.properties || {}), ...(file.appProperties || {}) }
   const matchedLocal = localCacheMap?.get(file.id)
 
   // 1. Determine category: from appProperties or parent folder ID
@@ -142,10 +142,10 @@ function mapDriveFileToVaultDocument(
     maskedNumber: props.maskedIdentifier || matchedLocal?.maskedIdentifier || undefined,
     maskedIdentifier: props.maskedIdentifier || matchedLocal?.maskedIdentifier || undefined,
     maskedIdentifierSource: (props.maskedIdentifierSource as MetadataSource) || matchedLocal?.maskedIdentifierSource || 'none',
-    actualIdentifier: matchedLocal?.actualIdentifier || props.actualIdentifier || undefined,
-    documentIdentifier: matchedLocal?.documentIdentifier || props.documentIdentifier || undefined,
+    actualIdentifier: props.actualIdentifier || matchedLocal?.actualIdentifier || undefined,
+    documentIdentifier: props.actualIdentifier || props.documentIdentifier || matchedLocal?.actualIdentifier || matchedLocal?.documentIdentifier || undefined,
     documentIdentifierSource: (props.documentIdentifierSource as MetadataSource) || matchedLocal?.documentIdentifierSource || 'none',
-    fullNumberMock: matchedLocal?.actualIdentifier || matchedLocal?.documentIdentifier || props.actualIdentifier || props.maskedIdentifier || undefined,
+    fullNumberMock: props.actualIdentifier || props.documentIdentifier || matchedLocal?.actualIdentifier || matchedLocal?.documentIdentifier || props.maskedIdentifier || undefined,
 
     issuer: props.issuer || config.defaultIssuer,
     issuerSource: (props.issuerSource as MetadataSource) || 'none',
@@ -289,7 +289,7 @@ export class GoogleDriveDocumentRepository implements DocumentRepository {
       do {
         const url: string = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
           query
-        )}&fields=nextPageToken,files(id,name,parents,size,createdTime,modifiedTime,appProperties)&pageSize=100${
+        )}&fields=nextPageToken,files(id,name,parents,size,createdTime,modifiedTime,appProperties,properties)&pageSize=100${
           pageToken ? `&pageToken=${pageToken}` : ''
         }`
 
@@ -601,6 +601,62 @@ export class GoogleDriveDocumentRepository implements DocumentRepository {
     }
 
     throw new Error('Unable to download document. File not accessible.')
+  }
+
+  async updateDocumentMetadata(id: string, updates: Partial<VaultDocument>): Promise<VaultDocument | null> {
+    const current = inMemoryDocs || (await getIndexedDBDocuments())
+    let updatedDoc: VaultDocument | null = null
+
+    const updated = current.map((d) => {
+      if (d.id === id) {
+        updatedDoc = {
+          ...d,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        }
+        return updatedDoc
+      }
+      return d
+    })
+
+    inMemoryDocs = updated
+    await saveIndexedDBDocuments(updated)
+
+    // Sync metadata patch to Google Drive if connected
+    if (isGoogleAuthConfigured() && updatedDoc) {
+      try {
+        const token = await this.getValidAccessToken()
+        const targetDoc: VaultDocument = updatedDoc
+        const driveProps: Record<string, string> = {
+          app: 'id_vault',
+          actualIdentifier: targetDoc.actualIdentifier || targetDoc.documentIdentifier || '',
+          documentIdentifier: targetDoc.actualIdentifier || targetDoc.documentIdentifier || '',
+          maskedIdentifier: targetDoc.maskedIdentifier || targetDoc.maskedNumber || '',
+          documentHolderName: targetDoc.documentHolderName || targetDoc.ownerName || '',
+          dateOfBirth: targetDoc.dateOfBirth || '',
+          gender: targetDoc.gender || '',
+          address: targetDoc.address || '',
+          fatherOrHusbandName: targetDoc.fatherOrHusbandName || '',
+        }
+
+        await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            properties: driveProps,
+            appProperties: driveProps,
+          }),
+        })
+        vaultLog('Synced metadata updates to Google Drive for doc', id)
+      } catch (err) {
+        vaultLog('Failed to sync metadata update to Drive', String(err))
+      }
+    }
+
+    return updatedDoc
   }
 
   async toggleFavorite(id: string): Promise<VaultDocument | null> {

@@ -205,11 +205,11 @@ export async function runLocalOCR(
       .map((l: string) => l.trim())
       .filter((l: string) => l.length > 0)
 
-    // For Front Side of ID documents, perform targeted crops:
+    // For Front Side of ID documents, perform targeted high-contrast crops:
     if (side === 'front' || !side) {
-      // Crop 1: Personal Details Block (Name, DOB, Gender)
+      // Crop 1: Identity / Details Block (Name, Father Name, DOB)
       try {
-        const detailsCropUrl = await cropImageRegion(imageDataUrl, 0.18, 0.10, 0.80, 0.50)
+        const detailsCropUrl = await cropImageRegion(imageDataUrl, 0.10, 0.12, 0.85, 0.55)
         const retCrop = await worker.recognize(detailsCropUrl)
         const cropText = retCrop.data.text || ''
         const cropLines = cropText
@@ -225,9 +225,9 @@ export async function runLocalOCR(
         // Continue
       }
 
-      // Crop 2: Bottom Number Block (Aadhaar 12-digit UID)
+      // Crop 2: Bottom Number Block (Aadhaar 12-digit UID & PAN Number in lower half)
       try {
-        const numberCropUrl = await cropImageRegion(imageDataUrl, 0.08, 0.65, 0.84, 0.32)
+        const numberCropUrl = await cropImageRegion(imageDataUrl, 0.05, 0.50, 0.90, 0.48)
         const retNum = await worker.recognize(numberCropUrl)
         const numText = retNum.data.text || ''
         const numLines = numText

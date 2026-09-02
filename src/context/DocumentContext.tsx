@@ -17,6 +17,7 @@ type DocumentContextValue = {
   isLoading: boolean
   error: string | null
   uploadDocument: (input: UploadDocumentInput) => Promise<VaultDocument>
+  updateDocument: (id: string, updates: Partial<VaultDocument>) => Promise<VaultDocument | null>
   deleteDocument: (id: string) => Promise<void>
   downloadDocument: (doc: VaultDocument) => Promise<void>
   toggleFavorite: (doc: VaultDocument) => Promise<void>
@@ -90,6 +91,18 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  // Update Document Metadata Action
+  const updateDocument = useCallback(
+    async (id: string, updates: Partial<VaultDocument>): Promise<VaultDocument | null> => {
+      const updated = await documentRepository.updateDocumentMetadata(id, updates)
+      if (updated) {
+        setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)))
+      }
+      return updated
+    },
+    []
+  )
+
   // Delete Document Action
   const deleteDocument = useCallback(async (id: string): Promise<void> => {
     await documentRepository.deleteDocument(id)
@@ -123,12 +136,13 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       isLoading,
       error,
       uploadDocument,
+      updateDocument,
       deleteDocument,
       downloadDocument,
       toggleFavorite,
       refreshDocuments,
     }),
-    [documents, isLoading, error, uploadDocument, deleteDocument, downloadDocument, toggleFavorite, refreshDocuments]
+    [documents, isLoading, error, uploadDocument, updateDocument, deleteDocument, downloadDocument, toggleFavorite, refreshDocuments]
   )
 
   return <DocumentContext.Provider value={value}>{children}</DocumentContext.Provider>

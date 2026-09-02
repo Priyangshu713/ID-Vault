@@ -501,14 +501,28 @@ export function parseAadhaar(ocr: OCRResult): ParsedDocumentMetadata {
 }
 
 // --------------------------------------------------------------------------
-// 2. PAN PARSER (Advanced Candidate Scoring)
+// --------------------------------------------------------------------------
+// 2. PAN PARSER (Multi-Strategy Extraction with OCR Normalization)
 // --------------------------------------------------------------------------
 export function parsePAN(ocr: OCRResult): ParsedDocumentMetadata {
   const allText = ocr.rawText
   const lowerText = allText.toLowerCase()
+  const frontPage = ocr.pages.find((p) => p.side === 'front') || ocr.pages[0]
+  const linesToScan = frontPage ? frontPage.lines : ocr.pages.flatMap((p) => p.lines)
 
   const detectedKeywords: string[] = []
-  const panKeywords = ['income tax department', 'permanent account number', 'govt. of india', 'incometax', 'pan card']
+  const panKeywords = [
+    'income tax department',
+    'permanent account number',
+    'govt. of india',
+    'govt of india',
+    'incometax',
+    'pan card',
+    'income tax',
+    'आयकर विभाग',
+    'भारत सरकार',
+    'स्थायी खाता संख्या',
+  ]
   panKeywords.forEach((kw) => {
     if (lowerText.includes(kw)) detectedKeywords.push(kw)
   })
@@ -518,77 +532,201 @@ export function parsePAN(ocr: OCRResult): ParsedDocumentMetadata {
     detectedKeywords,
   }
 
-  // 1. PAN Regex: 5 letters, 4 digits, 1 letter
-  const panRegex = /\b([A-Z]{5}[0-9]{4}[A-Z]{1})\b/
-  const panMatch = allText.match(panRegex)
-  if (panMatch) {
-    const panNum = panMatch[1]
+  // 1. PAN Number Extraction (Multi-Strategy with OCR Confusion Normalization)
+  let detectedPAN: { pan: string; masked: string; evidence: string } | null = null
+
+  // Strategy 1A: Direct Regex Match: 5 letters, 4 digits, 1 letter (case insensitive)
+  const directMatch = allText.match(/\b([A-Za-z]{5}[0-9]{4}[A-Za-z]{1})\b/)
+  if (directMatch) {
+    const pan = directMatch[1].toUpperCase()
+    detectedPAN = {
+      pan,
+      masked: `XXXXX${pan.slice(5)}`,
+      evidence: directMatch[0],
+    }
+  }
+
+  // Strategy 1B: Continuous or Spaced PAN in lines (e.g. "ABCDP 1234 D", "ABCDE-1234-F", "ABCDP 12O4 D")
+  if (!detectedPAN) {
+    for (const line of linesToScan) {
+      const cleanLine = line.replace(/[^A-Za-z0-9]/g, '')
+
+      for (let i = 0; i <= cleanLine.length - 10; i++) {
+        const candidate10 = cleanLine.slice(i, i + 10)
+
+        // Part 1: First 5 should be letters (correct digits 0->O, 1->I, 5->S, 8->B, 2->Z)
+        const part1 = candidate10
+          .slice(0, 5)
+          .replace(/0/g, 'O')
+          .replace(/1/g, 'I')
+          .replace(/5/g, 'S')
+          .replace(/8/g, 'B')
+          .replace(/2/g, 'Z')
+          .toUpperCase()
+
+        // Part 2: Middle 4 should be digits (correct letters O->0, I/l/|->1, S->5, B->8, Z->2, b->6)
+        const part2 = candidate10
+          .slice(5, 9)
+          .replace(/[oO]/g, '0')
+          .replace(/[Il|]/g, '1')
+          .replace(/[sS]/g, '5')
+          .replace(/[bB]/g, '8')
+          .replace(/[zZ]/g, '2')
+
+        // Part 3: Last 1 should be letter
+        const part3 = candidate10
+          .slice(9, 10)
+          .replace(/0/g, 'O')
+          .replace(/1/g, 'I')
+          .replace(/5/g, 'S')
+          .replace(/8/g, 'B')
+          .toUpperCase()
+
+        const candidate = part1 + part2 + part3
+        if (/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(candidate)) {
+          detectedPAN = {
+            pan: candidate,
+            masked: `XXXXX${candidate.slice(5)}`,
+            evidence: line,
+          }
+          break
+        }
+      }
+      if (detectedPAN) break
+    }
+  }
+
+  // Strategy 1C: Masked PAN pattern (e.g. XXXXX1234F)
+  if (!detectedPAN) {
+    const maskedMatch = allText.match(/\b([Xx*•]{5}[0-9]{4}[A-Za-z]{1})\b/)
+    if (maskedMatch) {
+      const masked = maskedMatch[1].toUpperCase()
+      detectedPAN = {
+        pan: masked,
+        masked: masked,
+        evidence: maskedMatch[0],
+      }
+    }
+  }
+
+  if (detectedPAN) {
     result.documentIdentifier = {
-      value: panNum,
+      value: detectedPAN.pan,
       source: 'document',
       confidence: 'high',
-      evidence: `Detected valid PAN format: "${panNum}"`,
+      evidence: `Detected PAN: "${detectedPAN.pan}"`,
     }
     result.maskedIdentifier = {
-      value: `XXXXX${panNum.slice(5)}`,
+      value: detectedPAN.masked,
       source: 'document',
       confidence: 'high',
     }
   }
 
-  // 2. Date of Birth
+  // 2. Date of Birth Extraction
   const dobMatch = allText.match(/\b(\d{2}[/-]\d{2}[/-]\d{4})\b/)
   if (dobMatch) {
     result.dateOfBirth = {
       value: dobMatch[1].replace(/-/g, '/'),
       source: 'document',
       confidence: 'high',
+      evidence: dobMatch[0],
     }
   }
 
-  // 3. Holder Name & Father's Name via positional anchors
-  const lines = allText.split('\n').map(cleanCandidateText).filter((l) => l.length > 0)
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.match(/Father's Name|Father Name|Father/i)) {
-      // Line above Father's Name is usually the Holder Name
-      if (i > 0) {
-        const candidateHolder = lines[i - 1]
-        if (isPlausiblePersonName(candidateHolder)) {
-          result.holderName = {
-            value: candidateHolder,
-            source: 'document',
-            confidence: 'high',
-            evidence: `Found above Father's Name line: "${candidateHolder}"`,
-          }
+  // 3. Holder Name & Father's Name Extraction (Multi-Anchor positional algorithm)
+  let holderName: string | undefined
+  let fatherName: string | undefined
+
+  // Find DOB Line index
+  let dobIndex = -1
+  for (let i = 0; i < linesToScan.length; i++) {
+    const l = linesToScan[i].toLowerCase()
+    if (/\b\d{2}[/-]\d{2}[/-]\d{4}\b/.test(linesToScan[i]) || l.includes('dob') || l.includes('birth') || l.includes('जन्म')) {
+      dobIndex = i
+      break
+    }
+  }
+
+  // Anchor 3A: Search for "Name" and "Father's Name" keywords
+  for (let i = 0; i < linesToScan.length; i++) {
+    const raw = linesToScan[i]
+    const lower = raw.toLowerCase()
+
+    if (lower.includes('father') || lower.includes('पिता')) {
+      if (i > 0 && !holderName) {
+        const candidate = cleanCandidateText(linesToScan[i - 1])
+        if (isPlausiblePersonName(candidate)) {
+          holderName = toTitleCase(candidate)
         }
       }
-      // Line below Father's Name is the Father's Name
-      if (i < lines.length - 1) {
-        const candidateFather = lines[i + 1]
-        if (isPlausiblePersonName(candidateFather)) {
-          result.fatherOrHusbandName = {
-            value: candidateFather,
-            source: 'document',
-            confidence: 'high',
-            evidence: `Found below Father's Name line: "${candidateFather}"`,
-          }
+      if (i < linesToScan.length - 1 && !fatherName) {
+        const candidate = cleanCandidateText(linesToScan[i + 1])
+        if (isPlausiblePersonName(candidate)) {
+          fatherName = toTitleCase(candidate)
+        }
+      }
+    }
+
+    if (
+      (lower.includes('name') || lower.includes('नाम')) &&
+      !lower.includes('father') &&
+      !lower.includes('पिता') &&
+      !lower.includes('permanent') &&
+      !lower.includes('account') &&
+      !lower.includes('department')
+    ) {
+      if (i < linesToScan.length - 1 && !holderName) {
+        const candidate = cleanCandidateText(linesToScan[i + 1])
+        if (isPlausiblePersonName(candidate)) {
+          holderName = toTitleCase(candidate)
         }
       }
     }
   }
 
-  // Fallback: search for uppercase name between Income Tax header and DOB
-  if (!result.holderName) {
-    for (const l of lines) {
-      if (isPlausiblePersonName(l) && l === l.toUpperCase() && l.length >= 6) {
-        result.holderName = {
-          value: l,
-          source: 'document',
-          confidence: 'medium',
-        }
+  // Anchor 3B: Position relative to DOB
+  if (dobIndex > 0) {
+    const lineAbove1 = cleanCandidateText(linesToScan[dobIndex - 1])
+    const lineAbove2 = dobIndex >= 2 ? cleanCandidateText(linesToScan[dobIndex - 2]) : ''
+
+    if (!fatherName && isPlausiblePersonName(lineAbove1)) {
+      fatherName = toTitleCase(lineAbove1)
+    }
+    if (!holderName && isPlausiblePersonName(lineAbove2)) {
+      holderName = toTitleCase(lineAbove2)
+    }
+    if (!holderName && isPlausiblePersonName(lineAbove1)) {
+      holderName = toTitleCase(lineAbove1)
+    }
+  }
+
+  // Anchor 3C: General scan for valid name lines between header and PAN number
+  if (!holderName) {
+    for (let i = 0; i < linesToScan.length; i++) {
+      const candidate = cleanCandidateText(linesToScan[i])
+      if (isPlausiblePersonName(candidate)) {
+        holderName = toTitleCase(candidate)
         break
       }
+    }
+  }
+
+  if (holderName) {
+    result.holderName = {
+      value: holderName,
+      source: 'document',
+      confidence: 'high',
+      evidence: `Detected cardholder name: "${holderName}"`,
+    }
+  }
+
+  if (fatherName && fatherName !== holderName) {
+    result.fatherOrHusbandName = {
+      value: fatherName,
+      source: 'document',
+      confidence: 'high',
+      evidence: `Detected father name: "${fatherName}"`,
     }
   }
 
