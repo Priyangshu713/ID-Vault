@@ -391,7 +391,7 @@
     inset 0 1px 1px rgba(255, 255, 255, 0.28),
     0 10px 24px color-mix(in srgb, var(--document-deep) 25%, transparent);
   transform-origin: center bottom;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
   user-select: none;
 }
 
@@ -1097,9 +1097,12 @@
   margin: 0 -1.2rem;
   padding: 0.2rem 1.2rem 1rem;
   overflow-x: auto;
-  overscroll-behavior-inline: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .document-section-rail::-webkit-scrollbar {
