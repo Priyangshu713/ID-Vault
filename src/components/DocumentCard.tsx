@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Star } from 'lucide-react'
-import type { PointerEvent } from 'react'
+import type { PointerEvent, KeyboardEvent, TouchEvent } from 'react'
 import type { VaultDocument } from '../data/types'
 import { liftCard, settleCard } from '../animations/cardAnimations'
 import { gsap } from 'gsap'
@@ -23,6 +23,8 @@ export function DocumentCard({
   large = false,
 }: DocumentCardProps) {
   const cardRef = useRef<HTMLElement>(null)
+  const touchStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const isDraggingRef = useRef(false)
 
   const handlePointerMove = (event: PointerEvent<HTMLElement>) => {
     if (event.pointerType !== 'mouse' || !cardRef.current) return
@@ -53,6 +55,33 @@ export function DocumentCard({
     })
   }
 
+  const handleTouchStart = (e: TouchEvent<HTMLElement>) => {
+    const t = e.touches[0]
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+    isDraggingRef.current = false
+  }
+
+  const handleTouchMove = (e: TouchEvent<HTMLElement>) => {
+    const t = e.touches[0]
+    const dx = Math.abs(t.clientX - touchStartRef.current.x)
+    const dy = Math.abs(t.clientY - touchStartRef.current.y)
+    if (dx > 6 || dy > 6) {
+      isDraggingRef.current = true
+    }
+  }
+
+  const handleCardClick = () => {
+    if (isDraggingRef.current) return
+    onOpen(document)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onOpen(document)
+    }
+  }
+
   const holderName = document.documentHolderName || document.ownerName || 'Not detected'
   const identifier = document.maskedIdentifier || document.maskedNumber
 
@@ -65,10 +94,14 @@ export function DocumentCard({
       onPointerLeave={(e) => e.pointerType === 'mouse' && cardRef.current && settleCard(cardRef.current)}
       style={{ '--card-index': index } as React.CSSProperties}
     >
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         className="document-card__open"
-        onClick={() => onOpen(document)}
+        onClick={handleCardClick}
+        onKeyDown={handleKeyDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         aria-label={`Open ${document.name}`}
       >
         <span className="document-card__shine" aria-hidden="true" />
@@ -97,7 +130,7 @@ export function DocumentCard({
             {document.expiryLabel}
           </span>
         )}
-      </button>
+      </div>
       {onToggleFavourite && (
         <button
           type="button"
