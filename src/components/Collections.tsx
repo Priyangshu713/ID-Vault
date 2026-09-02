@@ -1,5 +1,5 @@
 import type { Collection, VaultDocument } from '../data/types'
-import { DocumentVisual } from './DocumentVisual'
+import { CategoryVisual } from './CategoryVisual'
 
 type CollectionsProps = {
   collections: Collection[]
@@ -16,7 +16,7 @@ export function Collections({ collections, documents, onOpen, onSeeAll }: Collec
           <h2 id="collections-title">Collections</h2>
           <p>Organised around your life</p>
         </div>
-        <button className="text-button" onClick={onSeeAll}>
+        <button type="button" className="text-button" onClick={onSeeAll}>
           Browse all
         </button>
       </div>
@@ -25,10 +25,10 @@ export function Collections({ collections, documents, onOpen, onSeeAll }: Collec
           const matchingDocs = documents.filter(
             (d) => d.category === collection.category || d.secondaryCategories?.includes(collection.category)
           )
-          const previewDocs = matchingDocs.slice(0, 3)
 
           return (
             <button
+              type="button"
               className={`collection-item collection-item--${collection.category}`}
               onClick={() => onOpen(collection)}
               key={collection.category}
@@ -39,20 +39,9 @@ export function Collections({ collections, documents, onOpen, onSeeAll }: Collec
                 <span className="collection-item__count">{matchingDocs.length}</span>
               </div>
 
-              {/* Overlapping mini SVG card previews */}
-              <div className="collection-item__previews" aria-hidden="true">
-                {previewDocs.map((doc, idx) => (
-                  <span
-                    key={doc.id}
-                    className={`preview-card-layer preview-card-layer--${idx}`}
-                    style={{ zIndex: 3 - idx }}
-                  >
-                    <DocumentVisual type={doc.visualType} decorative />
-                  </span>
-                ))}
-                {previewDocs.length === 0 && (
-                  <span className="preview-card-placeholder">Empty</span>
-                )}
+              {/* Clean Category Visual (No overlapping card mess) */}
+              <div className="collection-item__visual" aria-hidden="true">
+                <CategoryVisual category={collection.category} size={36} />
               </div>
 
               <div className="collection-item__footer">

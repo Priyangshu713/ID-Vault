@@ -1,7 +1,6 @@
-import { ChevronRight, Plus } from 'lucide-react'
+import { Award, Car, ChevronRight, CreditCard, FileText, GraduationCap, Landmark, Plus, ShieldCheck } from 'lucide-react'
 import { generateCollections } from '../data/mockCollections'
-import { DocumentVisual } from '../components/DocumentVisual'
-import { TrustBadge, categoryCopy } from '../components/DocumentMeta'
+import { TrustBadge } from '../components/DocumentMeta'
 import type { Collection, VaultDocument } from '../data/types'
 
 type CollectionsPageProps = {
@@ -9,6 +8,31 @@ type CollectionsPageProps = {
   onOpen: (document: VaultDocument) => void
   onCollection: (collection: Collection) => void
   onAdd: () => void
+}
+
+function getDocumentRoundIcon(visualType: string, category: string) {
+  switch (visualType) {
+    case 'aadhaar':
+      return <ShieldCheck size={18} strokeWidth={2.1} />
+    case 'pan':
+      return <CreditCard size={18} strokeWidth={2.1} />
+    case 'driving-licence':
+      return <Car size={18} strokeWidth={2.1} />
+    case 'degree':
+    case 'marksheet':
+      return <GraduationCap size={18} strokeWidth={2.1} />
+    case 'tax-form':
+      return <Landmark size={18} strokeWidth={2.1} />
+    case 'domicile':
+    case 'certificate':
+      return <Award size={18} strokeWidth={2.1} />
+    default:
+      if (category === 'transport') return <Car size={18} strokeWidth={2.1} />
+      if (category === 'education') return <GraduationCap size={18} strokeWidth={2.1} />
+      if (category === 'financial') return <Landmark size={18} strokeWidth={2.1} />
+      if (category === 'certificate') return <Award size={18} strokeWidth={2.1} />
+      return <FileText size={18} strokeWidth={2.1} />
+  }
 }
 
 export function CollectionsPage({ documents, onOpen, onCollection, onAdd }: CollectionsPageProps) {
@@ -38,6 +62,7 @@ export function CollectionsPage({ documents, onOpen, onCollection, onAdd }: Coll
           return (
             <section className={`collection-page-group collection-page-group--${collection.category}`} key={collection.category}>
               <button
+                type="button"
                 className="collection-page-heading"
                 onClick={() => onCollection(collection)}
                 aria-label={`View ${collection.name} collection`}
@@ -54,18 +79,19 @@ export function CollectionsPage({ documents, onOpen, onCollection, onAdd }: Coll
               <div className="collection-group-items">
                 {matches.slice(0, 3).map((document) => (
                   <button
+                    type="button"
                     className="document-list-row"
                     onClick={() => onOpen(document)}
                     key={document.id}
                     aria-label={`Open ${document.name}`}
                   >
-                    <span className={`list-document-icon list-document-icon--${document.visualType}`}>
-                      <DocumentVisual type={document.visualType} decorative />
+                    <span className={`list-round-icon list-round-icon--${document.visualType}`}>
+                      {getDocumentRoundIcon(document.visualType, document.category)}
                     </span>
                     <span className="document-list-row__text">
                       <strong>{document.name}</strong>
                       <small>
-                        {document.documentType} · {document.maskedNumber || '•••• ••••'}
+                        {document.documentType} • {document.maskedNumber || 'Protected'}
                       </small>
                     </span>
                     <TrustBadge status={document.trustStatus} compact />
