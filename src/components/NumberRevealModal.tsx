@@ -211,7 +211,7 @@ export function NumberRevealModal({ document, onClose, timeoutSeconds = 30 }: Nu
                     onChange={(e) => setManualInput(e.target.value)}
                     placeholder={
                       document.visualType === 'aadhaar'
-                        ? 'e.g. 6160 6593 1237'
+                        ? 'e.g. 5489 2710 9341'
                         : document.visualType === 'pan'
                         ? 'e.g. ABCDE1234F'
                         : 'Enter full identifier'

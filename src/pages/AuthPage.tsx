@@ -189,7 +189,7 @@ export function AuthPage() {
                   type="text"
                   value={devName}
                   onChange={(e) => setDevName(e.target.value)}
-                  placeholder="e.g. Priyangshu Sharma"
+                  placeholder="e.g. Alex Morgan"
                   required
                 />
               </div>
@@ -199,7 +199,7 @@ export function AuthPage() {
                   type="email"
                   value={devEmail}
                   onChange={(e) => setDevEmail(e.target.value)}
-                  placeholder="e.g. priyangshu.sharma@gmail.com"
+                  placeholder="e.g. alex.morgan@example.com"
                   required
                 />
               </div>
