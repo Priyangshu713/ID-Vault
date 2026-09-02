@@ -60,6 +60,8 @@
 
 .page-frame {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ==========================================================================
@@ -1076,7 +1078,16 @@
 .document-category-sections {
   margin-top: 1.6rem;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.document-category-section {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .document-category-section__heading {
